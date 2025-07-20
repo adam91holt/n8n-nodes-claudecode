@@ -15,7 +15,7 @@ export class ClaudeCode implements INodeType {
     group: ['transform'],
     version: 1,
     subtitle: '={{$parameter["operation"] + ": " + $parameter["prompt"]}}',
-    description: 'Execute Claude Code SDK with streaming support',
+    description: 'Execute Claude Code SDK with streaming support and MCP',
     defaults: {
       name: 'Claude Code',
     },
@@ -53,6 +53,37 @@ export class ClaudeCode implements INodeType {
         required: true,
       },
       {
+        displayName: 'Model',
+        name: 'model',
+        type: 'options',
+        options: [
+          {
+            name: 'Sonnet',
+            value: 'sonnet',
+          },
+          {
+            name: 'Opus',
+            value: 'opus',
+          },
+        ],
+        default: 'sonnet',
+        description: 'Claude model to use',
+      },
+      {
+        displayName: 'Max Turns',
+        name: 'maxTurns',
+        type: 'number',
+        default: 5,
+        description: 'Maximum conversation turns',
+      },
+      {
+        displayName: 'Timeout',
+        name: 'timeout',
+        type: 'number',
+        default: 300,
+        description: 'Timeout in seconds',
+      },
+      {
         displayName: 'Output Format',
         name: 'outputFormat',
         type: 'options',
@@ -77,12 +108,90 @@ export class ClaudeCode implements INodeType {
         description: 'How to format the output',
       },
       {
-        displayName: 'Project Path',
-        name: 'projectPath',
-        type: 'string',
-        default: '',
-        description: 'Path to the project directory (optional)',
-        placeholder: '/path/to/project',
+        displayName: 'Allowed Tools',
+        name: 'allowedTools',
+        type: 'multiOptions',
+        options: [
+          // Built-in Claude Code tools
+          { name: 'Task', value: 'Task', description: 'Launch agents for complex searches' },
+          { name: 'Bash', value: 'Bash', description: 'Execute bash commands' },
+          { name: 'Glob', value: 'Glob', description: 'Find files by pattern' },
+          { name: 'Grep', value: 'Grep', description: 'Search file contents' },
+          { name: 'LS', value: 'LS', description: 'List directory contents' },
+          { name: 'Exit Plan Mode', value: 'exit_plan_mode', description: 'Exit planning mode' },
+          { name: 'Read', value: 'Read', description: 'Read file contents' },
+          { name: 'Edit', value: 'Edit', description: 'Edit files' },
+          { name: 'MultiEdit', value: 'MultiEdit', description: 'Make multiple edits' },
+          { name: 'Write', value: 'Write', description: 'Write files' },
+          { name: 'Notebook Read', value: 'NotebookRead', description: 'Read Jupyter notebooks' },
+          { name: 'Notebook Edit', value: 'NotebookEdit', description: 'Edit Jupyter notebooks' },
+          { name: 'Web Fetch', value: 'WebFetch', description: 'Fetch web content' },
+          { name: 'Todo Write', value: 'TodoWrite', description: 'Manage todo lists' },
+          { name: 'Web Search', value: 'WebSearch', description: 'Search the web' },
+        ],
+        default: ['WebFetch', 'TodoWrite', 'WebSearch', 'exit_plan_mode', 'Task'],
+        description: 'Which built-in tools Claude can use',
+      },
+      {
+        displayName: 'MCP Servers',
+        name: 'mcpServers',
+        type: 'fixedCollection',
+        typeOptions: {
+          multipleValues: true,
+        },
+        default: {},
+        placeholder: 'Add MCP Server',
+        options: [
+          {
+            name: 'server',
+            displayName: 'MCP Server',
+            values: [
+              {
+                displayName: 'Server Name',
+                name: 'name',
+                type: 'string',
+                default: '',
+                description: 'Unique name for this MCP server',
+                required: true,
+              },
+              {
+                displayName: 'Command',
+                name: 'command',
+                type: 'string',
+                default: 'npx',
+                description: 'Command to run the MCP server',
+                required: true,
+              },
+              {
+                displayName: 'Arguments',
+                name: 'args',
+                type: 'string',
+                default: '',
+                description: 'Arguments for the command (comma-separated)',
+                placeholder: '-y,@modelcontextprotocol/server-filesystem,/path',
+              },
+              {
+                displayName: 'Environment Variables',
+                name: 'env',
+                type: 'string',
+                typeOptions: {
+                  rows: 3,
+                },
+                default: '',
+                description: 'Environment variables (KEY=value format, one per line)',
+                placeholder: 'GITHUB_TOKEN=your-token\nAPI_KEY=your-key',
+              },
+              {
+                displayName: 'Allowed MCP Tools',
+                name: 'allowedMcpTools',
+                type: 'string',
+                default: '*',
+                description: 'Comma-separated list of allowed tools from this server (* for all)',
+                placeholder: 'read_file,write_file or * for all',
+              },
+            ],
+          },
+        ],
       },
       {
         displayName: 'Additional Options',
@@ -91,23 +200,6 @@ export class ClaudeCode implements INodeType {
         placeholder: 'Add Option',
         default: {},
         options: [
-          {
-            displayName: 'Model',
-            name: 'model',
-            type: 'options',
-            options: [
-              {
-                name: 'Sonnet',
-                value: 'sonnet',
-              },
-              {
-                name: 'Opus',
-                value: 'opus',
-              },
-            ],
-            default: 'sonnet',
-            description: 'Override the Claude model',
-          },
           {
             displayName: 'System Prompt',
             name: 'systemPrompt',
@@ -119,48 +211,11 @@ export class ClaudeCode implements INodeType {
             description: 'System prompt to provide context',
           },
           {
-            displayName: 'Allowed Tools',
-            name: 'allowedTools',
-            type: 'multiOptions',
-            options: [
-              { name: 'Task', value: 'Task' },
-              { name: 'Bash', value: 'Bash' },
-              { name: 'Glob', value: 'Glob' },
-              { name: 'Grep', value: 'Grep' },
-              { name: 'LS', value: 'LS' },
-              { name: 'Read', value: 'Read' },
-              { name: 'Edit', value: 'Edit' },
-              { name: 'MultiEdit', value: 'MultiEdit' },
-              { name: 'Write', value: 'Write' },
-              { name: 'NotebookRead', value: 'NotebookRead' },
-              { name: 'NotebookEdit', value: 'NotebookEdit' },
-              { name: 'WebFetch', value: 'WebFetch' },
-              { name: 'TodoWrite', value: 'TodoWrite' },
-              { name: 'WebSearch', value: 'WebSearch' },
-            ],
-            default: [],
-            description: 'Which tools Claude can use',
-          },
-          {
-            displayName: 'Max Turns',
-            name: 'maxTurns',
-            type: 'number',
-            default: 5,
-            description: 'Maximum conversation turns',
-          },
-          {
             displayName: 'Require Permissions',
             name: 'requirePermissions',
             type: 'boolean',
             default: false,
             description: 'Whether to require permission for tool use',
-          },
-          {
-            displayName: 'Timeout',
-            name: 'timeout',
-            type: 'number',
-            default: 300,
-            description: 'Timeout in seconds',
           },
           {
             displayName: 'Debug Mode',
@@ -182,20 +237,27 @@ export class ClaudeCode implements INodeType {
       try {
         const operation = this.getNodeParameter('operation', itemIndex) as string;
         const prompt = this.getNodeParameter('prompt', itemIndex) as string;
+        const model = this.getNodeParameter('model', itemIndex) as string;
+        const maxTurns = this.getNodeParameter('maxTurns', itemIndex) as number;
+        const timeout = this.getNodeParameter('timeout', itemIndex) as number;
         const outputFormat = this.getNodeParameter('outputFormat', itemIndex) as string;
-        const projectPath = this.getNodeParameter('projectPath', itemIndex, '') as string;
+        const allowedTools = this.getNodeParameter('allowedTools', itemIndex, []) as string[];
+        const mcpServers = this.getNodeParameter('mcpServers', itemIndex, {}) as any;
         const additionalOptions = this.getNodeParameter('additionalOptions', itemIndex) as any;
 
         // Create abort controller for timeout
         const abortController = new AbortController();
-        const timeout = (additionalOptions.timeout || 300) * 1000;
-        const timeoutId = setTimeout(() => abortController.abort(), timeout);
+        const timeoutMs = timeout * 1000;
+        const timeoutId = setTimeout(() => abortController.abort(), timeoutMs);
 
         // Log start
         if (additionalOptions.debug) {
           console.log(`[ClaudeCode] Starting execution for item ${itemIndex}`);
           console.log(`[ClaudeCode] Prompt: ${prompt.substring(0, 100)}...`);
-          console.log(`[ClaudeCode] Model: ${additionalOptions.model || 'sonnet'}`);
+          console.log(`[ClaudeCode] Model: ${model}`);
+          console.log(`[ClaudeCode] Max turns: ${maxTurns}`);
+          console.log(`[ClaudeCode] Timeout: ${timeout}s`);
+          console.log(`[ClaudeCode] Allowed built-in tools: ${allowedTools.join(', ')}`);
         }
 
         // Build query options
@@ -203,23 +265,122 @@ export class ClaudeCode implements INodeType {
           prompt,
           abortController,
           options: {
-            maxTurns: additionalOptions.maxTurns || 5,
+            maxTurns,
             permissionMode: additionalOptions.requirePermissions ? 'default' : 'bypassPermissions',
-            model: additionalOptions.model || 'sonnet',
+            model,
           },
         };
 
         // Add optional parameters
-        if (projectPath) {
-          queryOptions.options.projectPath = projectPath;
-        }
-        
         if (additionalOptions.systemPrompt) {
           queryOptions.options.systemPrompt = additionalOptions.systemPrompt;
         }
 
-        if (additionalOptions.allowedTools && additionalOptions.allowedTools.length > 0) {
-          queryOptions.options.allowedTools = additionalOptions.allowedTools;
+        // Process allowed tools - start with built-in tools
+        const finalAllowedTools = [...allowedTools];
+
+        // Process MCP servers
+        if (mcpServers.server && mcpServers.server.length > 0) {
+          const mcpConfig: any = {};
+          
+          for (const serverConfig of mcpServers.server) {
+            if (!serverConfig.name || !serverConfig.command) {
+              if (additionalOptions.debug) {
+                console.log(`[ClaudeCode] Skipping MCP server with missing name or command:`, serverConfig);
+              }
+              continue;
+            }
+
+            // Build server configuration
+            const server: any = {
+              command: serverConfig.command,
+              args: serverConfig.args 
+                ? serverConfig.args.split(',').map((arg: string) => arg.trim()).filter((arg: string) => arg.length > 0) 
+                : [],
+            };
+            
+            if (additionalOptions.debug) {
+              console.log(`[ClaudeCode] Configuring MCP server "${serverConfig.name}":`, {
+                command: server.command,
+                args: server.args,
+                hasEnv: !!serverConfig.env
+              });
+            }
+
+            // Add environment variables if specified
+            if (serverConfig.env) {
+              const envVars: any = {};
+              const envLines = serverConfig.env.split('\n').filter((line: string) => line.trim().length > 0);
+              
+              for (const line of envLines) {
+                const equalIndex = line.indexOf('=');
+                if (equalIndex > 0) {
+                  const key = line.substring(0, equalIndex).trim();
+                  let value = line.substring(equalIndex + 1).trim();
+                  
+                  // Replace environment variable tokens like ${GITHUB_TOKEN} with actual values
+                  value = value.replace(/\$\{([^}]+)\}/g, (match: string, envVar: string) => {
+                    const replacement = process.env[envVar];
+                    if (additionalOptions.debug && !replacement) {
+                      console.log(`[ClaudeCode] Warning: Environment variable ${envVar} not found`);
+                    }
+                    return replacement || match;
+                  });
+                  
+                  // Also support $VARNAME format
+                  value = value.replace(/\$([A-Z_][A-Z0-9_]*)/g, (match: string, envVar: string) => {
+                    const replacement = process.env[envVar];
+                    if (additionalOptions.debug && !replacement) {
+                      console.log(`[ClaudeCode] Warning: Environment variable ${envVar} not found`);
+                    }
+                    return replacement || match;
+                  });
+                  
+                  envVars[key] = value;
+                  
+                  if (additionalOptions.debug) {
+                    console.log(`[ClaudeCode] MCP server "${serverConfig.name}" env: ${key}=${value.substring(0, 10)}...`);
+                  }
+                }
+              }
+              
+              if (Object.keys(envVars).length > 0) {
+                server.env = envVars;
+              }
+            }
+
+            mcpConfig[serverConfig.name] = server;
+
+            // Add allowed MCP tools
+            if (serverConfig.allowedMcpTools === '*') {
+              // Allow all tools from this server
+              finalAllowedTools.push(`mcp__${serverConfig.name}`);
+            } else if (serverConfig.allowedMcpTools) {
+              // Add specific tools
+              const tools = serverConfig.allowedMcpTools.split(',').map((t: string) => t.trim());
+              for (const tool of tools) {
+                if (tool) {
+                  finalAllowedTools.push(`mcp__${serverConfig.name}__${tool}`);
+                }
+              }
+            }
+          }
+
+          // Set MCP servers in options
+          if (Object.keys(mcpConfig).length > 0) {
+            queryOptions.options.mcpServers = mcpConfig;
+            if (additionalOptions.debug) {
+              console.log(`[ClaudeCode] MCP servers configured:`, JSON.stringify(mcpConfig, null, 2));
+            }
+          }
+        }
+
+        // Set allowed tools if any are specified
+        if (finalAllowedTools.length > 0) {
+          queryOptions.options.allowedTools = finalAllowedTools;
+          if (additionalOptions.debug) {
+            console.log(`[ClaudeCode] Final allowed tools: ${finalAllowedTools.join(', ')}`);
+          }
         }
 
         // Add continue flag if needed
@@ -237,6 +398,11 @@ export class ClaudeCode implements INodeType {
             
             if (additionalOptions.debug) {
               console.log(`[ClaudeCode] Received message type: ${message.type}`);
+              
+              // Log MCP server initialization
+              if (message.type === 'system' && message.subtype === 'init' && message.mcp_servers) {
+                console.log(`[ClaudeCode] MCP servers initialized:`, message.mcp_servers);
+              }
             }
 
             // Track progress
@@ -244,6 +410,8 @@ export class ClaudeCode implements INodeType {
               const content = message.message.content[0];
               if (additionalOptions.debug && content.type === 'text') {
                 console.log(`[ClaudeCode] Assistant: ${content.text.substring(0, 100)}...`);
+              } else if (additionalOptions.debug && content.type === 'tool_use') {
+                console.log(`[ClaudeCode] Tool use: ${content.name}`);
               }
             }
           }
@@ -285,6 +453,7 @@ export class ClaudeCode implements INodeType {
               m.type === 'assistant' && 
               m.message?.content?.[0]?.type === 'tool_use'
             );
+            const systemInit = messages.find((m: any) => m.type === 'system' && m.subtype === 'init') as any;
             const resultMessage = messages.find((m: any) => m.type === 'result') as any;
 
             returnData.push({
@@ -295,6 +464,8 @@ export class ClaudeCode implements INodeType {
                   assistantMessageCount: assistantMessages.length,
                   toolUseCount: toolUses.length,
                   hasResult: !!resultMessage,
+                  mcpServersLoaded: systemInit?.mcp_servers || [],
+                  toolsAvailable: systemInit?.tools || [],
                 },
                 result: resultMessage?.result || resultMessage?.error || null,
                 metrics: resultMessage ? {

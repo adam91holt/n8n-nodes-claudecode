@@ -3,12 +3,12 @@ version: '3.8'
 services:
   n8n:
     build: 
-      context: .
-      dockerfile: Dockerfile
+      context: ../
+      dockerfile: docker/Dockerfile
     container_name: n8n-claudecode
     restart: unless-stopped
     ports:
-      - "5678:5678"
+      - "5679:5678"
     environment:
       - N8N_BASIC_AUTH_ACTIVE=true
       - N8N_BASIC_AUTH_USER=admin
@@ -19,6 +19,7 @@ services:
       - NODE_ENV=production
       - N8N_ENCRYPTION_KEY=n8n-encryption-key-change-me
       - N8N_USER_FOLDER=/home/node/.n8n
+      - N8N_SECURE_COOKIE=false
       - N8N_CUSTOM_EXTENSIONS=/home/node/.n8n/custom
       # Claude authentication method (browser or apikey)
       - CLAUDE_AUTH_METHOD=${CLAUDE_AUTH_METHOD:-browser}
@@ -26,6 +27,8 @@ services:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       # Browser profile for Claude Pro
       - CLAUDE_BROWSER_PROFILE=${CLAUDE_BROWSER_PROFILE:-default}
+      # For X11 forwarding (optional)
+      - DISPLAY=${DISPLAY:-:0}
     volumes:
       - n8n_data:/home/node/.n8n
       - ./custom:/home/node/.n8n/custom
@@ -33,9 +36,6 @@ services:
       - chrome_data:/home/node/.config/google-chrome
       # Mount X11 socket for GUI (optional, for initial auth)
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
-    environment:
-      # For X11 forwarding (optional)
-      - DISPLAY=${DISPLAY:-:0}
     networks:
       - n8n-network
     healthcheck:
