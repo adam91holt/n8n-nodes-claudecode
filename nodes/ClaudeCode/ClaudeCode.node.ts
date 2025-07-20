@@ -5,10 +5,7 @@ import type {
   INodeTypeDescription,
 } from 'n8n-workflow';
 import { NodeOperationError } from 'n8n-workflow';
-import { promisify } from 'util';
-import { exec } from 'child_process';
-
-const execPromise = promisify(exec);
+import { query, type SDKMessage } from '@anthropic-ai/claude-code';
 
 export class ClaudeCode implements INodeType {
   description: INodeTypeDescription = {
@@ -18,42 +15,31 @@ export class ClaudeCode implements INodeType {
     group: ['transform'],
     version: 1,
     subtitle: '={{$parameter["operation"] + ": " + $parameter["prompt"]}}',
-    description: 'Execute Claude Code CLI commands with streaming JSON support',
+    description: 'Execute Claude Code SDK with streaming support',
     defaults: {
       name: 'Claude Code',
     },
     inputs: ['main'],
     outputs: ['main'],
-    credentials: [
-      {
-        name: 'claudeCodeApi',
-        required: false,
-      },
-    ],
     properties: [
       {
         displayName: 'Operation',
         name: 'operation',
         type: 'options',
-        noDataExpression: true,
         options: [
           {
             name: 'Query',
             value: 'query',
-            description: 'Execute a query using Claude Code CLI',
+            description: 'Send a query to Claude Code',
           },
           {
             name: 'Continue',
             value: 'continue',
-            description: 'Continue a previous conversation',
-          },
-          {
-            name: 'Advanced',
-            value: 'advanced',
-            description: 'Execute with advanced options',
+            description: 'Continue the previous conversation',
           },
         ],
         default: 'query',
+        description: 'The operation to perform',
       },
       {
         displayName: 'Prompt',
@@ -63,22 +49,8 @@ export class ClaudeCode implements INodeType {
           rows: 4,
         },
         default: '',
-        placeholder: 'Explain this code...',
-        description: 'The prompt to send to Claude',
+        description: 'The prompt to send to Claude Code',
         required: true,
-      },
-      {
-        displayName: 'Project Path',
-        name: 'projectPath',
-        type: 'string',
-        default: '',
-        placeholder: '/path/to/project',
-        description: 'Override the project path for this execution',
-        displayOptions: {
-          show: {
-            operation: ['query', 'advanced'],
-          },
-        },
       },
       {
         displayName: 'Output Format',
@@ -86,23 +58,31 @@ export class ClaudeCode implements INodeType {
         type: 'options',
         options: [
           {
-            name: 'JSON Lines (Streaming)',
-            value: 'stream-json',
-            description: 'Get streaming JSON output (JSONL format)',
-          },
-          {
-            name: 'Plain Text',
-            value: 'text',
-            description: 'Get plain text output',
-          },
-          {
             name: 'Structured',
             value: 'structured',
-            description: 'Parse JSONL into structured data',
+            description: 'Parse output into structured format',
+          },
+          {
+            name: 'Messages',
+            value: 'messages',
+            description: 'Return raw messages array',
+          },
+          {
+            name: 'Text',
+            value: 'text',
+            description: 'Return final result text only',
           },
         ],
         default: 'structured',
         description: 'How to format the output',
+      },
+      {
+        displayName: 'Project Path',
+        name: 'projectPath',
+        type: 'string',
+        default: '',
+        description: 'Path to the project directory (optional)',
+        placeholder: '/path/to/project',
       },
       {
         displayName: 'Additional Options',
@@ -117,16 +97,12 @@ export class ClaudeCode implements INodeType {
             type: 'options',
             options: [
               {
-                name: 'Claude 3 Sonnet',
+                name: 'Sonnet',
                 value: 'sonnet',
               },
               {
-                name: 'Claude 3 Opus',
+                name: 'Opus',
                 value: 'opus',
-              },
-              {
-                name: 'Claude 3 Haiku',
-                value: 'haiku',
               },
             ],
             default: 'sonnet',
@@ -140,40 +116,30 @@ export class ClaudeCode implements INodeType {
               rows: 4,
             },
             default: '',
-            description: 'Override the system prompt',
+            description: 'System prompt to provide context',
           },
           {
             displayName: 'Allowed Tools',
             name: 'allowedTools',
             type: 'multiOptions',
             options: [
-              {
-                name: 'Bash',
-                value: 'Bash',
-              },
-              {
-                name: 'Read',
-                value: 'Read',
-              },
-              {
-                name: 'Write',
-                value: 'Write',
-              },
-              {
-                name: 'Edit',
-                value: 'Edit',
-              },
-              {
-                name: 'WebSearch',
-                value: 'WebSearch',
-              },
-              {
-                name: 'WebFetch',
-                value: 'WebFetch',
-              },
+              { name: 'Task', value: 'Task' },
+              { name: 'Bash', value: 'Bash' },
+              { name: 'Glob', value: 'Glob' },
+              { name: 'Grep', value: 'Grep' },
+              { name: 'LS', value: 'LS' },
+              { name: 'Read', value: 'Read' },
+              { name: 'Edit', value: 'Edit' },
+              { name: 'MultiEdit', value: 'MultiEdit' },
+              { name: 'Write', value: 'Write' },
+              { name: 'NotebookRead', value: 'NotebookRead' },
+              { name: 'NotebookEdit', value: 'NotebookEdit' },
+              { name: 'WebFetch', value: 'WebFetch' },
+              { name: 'TodoWrite', value: 'TodoWrite' },
+              { name: 'WebSearch', value: 'WebSearch' },
             ],
             default: [],
-            description: 'Tools to allow Claude to use',
+            description: 'Which tools Claude can use',
           },
           {
             displayName: 'Max Turns',
@@ -183,47 +149,25 @@ export class ClaudeCode implements INodeType {
             description: 'Maximum conversation turns',
           },
           {
-            displayName: 'Verbose',
-            name: 'verbose',
+            displayName: 'Require Permissions',
+            name: 'requirePermissions',
             type: 'boolean',
             default: false,
-            description: 'Enable verbose output',
+            description: 'Whether to require permission for tool use',
           },
           {
             displayName: 'Timeout',
             name: 'timeout',
             type: 'number',
             default: 300,
-            description: 'Command timeout in seconds',
+            description: 'Timeout in seconds',
           },
           {
-            displayName: 'Working Directory',
-            name: 'cwd',
-            type: 'string',
-            default: '',
-            description: 'Working directory for command execution',
-          },
-          {
-            displayName: 'Use API Key Override',
-            name: 'useApiKeyOverride',
+            displayName: 'Debug Mode',
+            name: 'debug',
             type: 'boolean',
             default: false,
-            description: 'Override credential settings and use API key authentication',
-          },
-          {
-            displayName: 'API Key Override',
-            name: 'apiKeyOverride',
-            type: 'string',
-            typeOptions: {
-              password: true,
-            },
-            default: '',
-            description: 'API key to use for this execution only',
-            displayOptions: {
-              show: {
-                useApiKeyOverride: [true],
-              },
-            },
+            description: 'Enable debug logging',
           },
         ],
       },
@@ -233,175 +177,150 @@ export class ClaudeCode implements INodeType {
   async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
     const items = this.getInputData();
     const returnData: INodeExecutionData[] = [];
-    const credentials = await this.getCredentials('claudeCodeApi').catch(() => ({}));
 
     for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
       try {
         const operation = this.getNodeParameter('operation', itemIndex) as string;
         const prompt = this.getNodeParameter('prompt', itemIndex) as string;
         const outputFormat = this.getNodeParameter('outputFormat', itemIndex) as string;
+        const projectPath = this.getNodeParameter('projectPath', itemIndex, '') as string;
         const additionalOptions = this.getNodeParameter('additionalOptions', itemIndex) as any;
 
-        // Build the command
-        let command = 'claude';
-        
-        // Add -p flag for non-interactive execution
-        command += ' -p';
+        // Create abort controller for timeout
+        const abortController = new AbortController();
+        const timeout = (additionalOptions.timeout || 300) * 1000;
+        const timeoutId = setTimeout(() => abortController.abort(), timeout);
 
-        // Handle different operations
-        if (operation === 'continue') {
-          command += ' -c';
+        // Log start
+        if (additionalOptions.debug) {
+          console.log(`[ClaudeCode] Starting execution for item ${itemIndex}`);
+          console.log(`[ClaudeCode] Prompt: ${prompt.substring(0, 100)}...`);
+          console.log(`[ClaudeCode] Model: ${additionalOptions.model || 'sonnet'}`);
         }
 
-        // Add the prompt (properly escaped)
-        command += ` "${prompt.replace(/"/g, '\\"')}"`;
+        // Build query options
+        const queryOptions: any = {
+          prompt,
+          abortController,
+          options: {
+            maxTurns: additionalOptions.maxTurns || 5,
+            permissionMode: additionalOptions.requirePermissions ? 'default' : 'bypassPermissions',
+            model: additionalOptions.model || 'sonnet',
+          },
+        };
 
-        // Add project path if specified
-        const projectPath = this.getNodeParameter('projectPath', itemIndex, '') as string || 
-                          (credentials.projectPath as string) || '';
+        // Add optional parameters
         if (projectPath) {
-          command += ` --project "${projectPath}"`;
+          queryOptions.options.projectPath = projectPath;
+        }
+        
+        if (additionalOptions.systemPrompt) {
+          queryOptions.options.systemPrompt = additionalOptions.systemPrompt;
         }
 
-        // Add output format for streaming JSON
-        if (outputFormat === 'stream-json' || outputFormat === 'structured') {
-          command += ' --output-format stream-json';
-        }
-
-        // Handle authentication method
-        const authMethod = credentials.authMethod || 'browser';
-        if (authMethod === 'browser') {
-          // Use browser authentication (Claude Pro/Max)
-          const browserProfile = credentials.browserProfile || 'default';
-          if (browserProfile && browserProfile !== 'default') {
-            command += ` --browser-profile "${browserProfile}"`;
-          }
-          // Ensure we're using browser auth
-          command += ' --use-browser';
-        }
-
-        // Add model if specified
-        const model = additionalOptions.model || credentials.model;
-        if (model) {
-          command += ` --model ${model}`;
-        }
-
-        // Add system prompt if specified
-        const systemPrompt = additionalOptions.systemPrompt || credentials.systemPrompt;
-        if (systemPrompt) {
-          command += ` --system-prompt "${systemPrompt.replace(/"/g, '\\"')}"`;
-        }
-
-        // Add allowed tools
         if (additionalOptions.allowedTools && additionalOptions.allowedTools.length > 0) {
-          command += ` --allowed-tools ${additionalOptions.allowedTools.join(',')}`;
+          queryOptions.options.allowedTools = additionalOptions.allowedTools;
         }
 
-        // Add max turns
-        if (additionalOptions.maxTurns) {
-          command += ` --max-turns ${additionalOptions.maxTurns}`;
+        // Add continue flag if needed
+        if (operation === 'continue') {
+          queryOptions.options.continue = true;
         }
 
-        // Add verbose flag
-        if (additionalOptions.verbose) {
-          command += ' --verbose';
-        }
+        // Execute query
+        const messages: SDKMessage[] = [];
+        const startTime = Date.now();
 
-        // Build environment variables
-        const env = { ...process.env };
-        
-        // Check for API key override first
-        if (additionalOptions.useApiKeyOverride && additionalOptions.apiKeyOverride) {
-          env.ANTHROPIC_API_KEY = additionalOptions.apiKeyOverride;
-          // Force API key auth when using override
-          command = command.replace(' --use-browser', '').replace(/--browser-profile "[^"]*"/, '');
-        } else if (authMethod === 'apiKey' && credentials.apiKey) {
-          // Handle regular API key authentication
-          env.ANTHROPIC_API_KEY = credentials.apiKey as string;
-        }
-        
-        // Add credentials environment variables
-        if (credentials.envVars) {
-          const envLines = (credentials.envVars as string).split('\n');
-          for (const line of envLines) {
-            const [key, value] = line.split('=');
-            if (key && value) {
-              env[key.trim()] = value.trim();
+        try {
+          for await (const message of query(queryOptions)) {
+            messages.push(message);
+            
+            if (additionalOptions.debug) {
+              console.log(`[ClaudeCode] Received message type: ${message.type}`);
+            }
+
+            // Track progress
+            if (message.type === 'assistant' && message.message?.content) {
+              const content = message.message.content[0];
+              if (additionalOptions.debug && content.type === 'text') {
+                console.log(`[ClaudeCode] Assistant: ${content.text.substring(0, 100)}...`);
+              }
             }
           }
-        }
 
-        // Execute the command
-        const timeout = (additionalOptions.timeout || 300) * 1000;
-        const cwd = additionalOptions.cwd || process.cwd();
+          clearTimeout(timeoutId);
+          
+          const duration = Date.now() - startTime;
+          if (additionalOptions.debug) {
+            console.log(`[ClaudeCode] Execution completed in ${duration}ms with ${messages.length} messages`);
+          }
 
-        const { stdout, stderr } = await execPromise(command, {
-          env,
-          cwd,
-          timeout,
-          maxBuffer: 10 * 1024 * 1024, // 10MB buffer
-        });
-
-        // Handle output based on format
-        if (outputFormat === 'text') {
-          returnData.push({
-            json: {
-              output: stdout,
-              error: stderr,
-              command,
-            },
-            pairedItem: itemIndex,
-          });
-        } else if (outputFormat === 'stream-json') {
-          // Return raw JSONL
-          returnData.push({
-            json: {
-              jsonl: stdout,
-              error: stderr,
-              command,
-            },
-            pairedItem: itemIndex,
-          });
-        } else if (outputFormat === 'structured') {
-          // Parse JSONL into structured format
-          const messages = stdout
-            .split('\n')
-            .filter(line => line.trim())
-            .map(line => {
-              try {
-                return JSON.parse(line);
-              } catch (error) {
-                return { type: 'parse_error', content: line };
-              }
-            });
-
-          // Extract useful information
-          const userMessages = messages.filter(m => m.type === 'user');
-          const assistantMessages = messages.filter(m => m.type === 'assistant');
-          const toolUses = messages.filter(m => m.type === 'tool_use');
-          const result = messages.find(m => m.type === 'result');
-
-          returnData.push({
-            json: {
-              messages,
-              summary: {
-                userMessageCount: userMessages.length,
-                assistantMessageCount: assistantMessages.length,
-                toolUseCount: toolUses.length,
-                hasResult: !!result,
+          // Format output based on selected format
+          if (outputFormat === 'text') {
+            // Find the result message
+            const resultMessage = messages.find(m => m.type === 'result') as any;
+            returnData.push({
+              json: {
+                result: resultMessage?.result || resultMessage?.error || '',
+                success: resultMessage?.subtype === 'success',
+                duration_ms: resultMessage?.duration_ms,
+                total_cost_usd: resultMessage?.total_cost_usd,
               },
-              result: result || null,
-              error: stderr,
-              command,
-            },
-            pairedItem: itemIndex,
-          });
+              pairedItem: itemIndex,
+            });
+          } else if (outputFormat === 'messages') {
+            // Return raw messages
+            returnData.push({
+              json: {
+                messages,
+                messageCount: messages.length,
+              },
+              pairedItem: itemIndex,
+            });
+          } else if (outputFormat === 'structured') {
+            // Parse into structured format
+            const userMessages = messages.filter((m: any) => m.type === 'user');
+            const assistantMessages = messages.filter((m: any) => m.type === 'assistant');
+            const toolUses = messages.filter((m: any) => 
+              m.type === 'assistant' && 
+              m.message?.content?.[0]?.type === 'tool_use'
+            );
+            const resultMessage = messages.find((m: any) => m.type === 'result') as any;
+
+            returnData.push({
+              json: {
+                messages,
+                summary: {
+                  userMessageCount: userMessages.length,
+                  assistantMessageCount: assistantMessages.length,
+                  toolUseCount: toolUses.length,
+                  hasResult: !!resultMessage,
+                },
+                result: resultMessage?.result || resultMessage?.error || null,
+                metrics: resultMessage ? {
+                  duration_ms: resultMessage.duration_ms,
+                  num_turns: resultMessage.num_turns,
+                  total_cost_usd: resultMessage.total_cost_usd,
+                  usage: resultMessage.usage,
+                } : null,
+                success: resultMessage?.subtype === 'success',
+              },
+              pairedItem: itemIndex,
+            });
+          }
+        } catch (queryError: any) {
+          clearTimeout(timeoutId);
+          throw queryError;
         }
       } catch (error) {
+        console.error(`[ClaudeCode] Error processing item ${itemIndex}:`, error);
+        const errorMessage = error instanceof Error ? error.message : 'An error occurred';
+        
         if (this.continueOnFail()) {
           returnData.push({
             json: {
-              error: error.message,
+              error: errorMessage,
+              errorDetails: error instanceof Error ? error.stack : undefined,
             },
             pairedItem: itemIndex,
           });
@@ -409,8 +328,11 @@ export class ClaudeCode implements INodeType {
         }
         throw new NodeOperationError(
           this.getNode(),
-          `Claude Code CLI error: ${error.message}`,
-          { itemIndex }
+          `Claude Code SDK error: ${errorMessage}`,
+          { 
+            itemIndex,
+            description: errorMessage
+          }
         );
       }
     }

@@ -5,66 +5,15 @@ import type {
 
 export class ClaudeCodeApi implements ICredentialType {
   name = 'claudeCodeApi';
-  displayName = 'Claude Code API';
+  displayName = 'Claude Code Settings';
   documentationUrl = 'https://github.com/adam91holt/n8n-nodes-claudecode';
   properties: INodeProperties[] = [
     {
-      displayName: 'Authentication Method',
-      name: 'authMethod',
-      type: 'options',
-      options: [
-        {
-          name: 'Claude Pro Subscription (Browser)',
-          value: 'browser',
-          description: 'Use your Claude Pro/Max subscription via browser authentication',
-        },
-        {
-          name: 'Anthropic API Key',
-          value: 'apiKey',
-          description: 'Use an Anthropic API key',
-        },
-      ],
-      default: 'browser',
-      description: 'How to authenticate with Claude',
-    },
-    {
-      displayName: 'API Key',
-      name: 'apiKey',
-      type: 'string',
-      typeOptions: {
-        password: true,
-      },
-      default: '',
-      description: 'Your Anthropic API key (sk-ant-...)',
-      displayOptions: {
-        show: {
-          authMethod: ['apiKey'],
-        },
-      },
-    },
-    {
-      displayName: 'Browser Profile',
-      name: 'browserProfile',
-      type: 'string',
-      default: 'default',
-      description: 'Browser profile name for Claude Pro authentication. Use "default" for the main profile.',
-      displayOptions: {
-        show: {
-          authMethod: ['browser'],
-        },
-      },
-    },
-    {
-      displayName: 'Claude Pro Notice',
-      name: 'proNotice',
+      displayName: 'Info',
+      name: 'info',
       type: 'notice',
       default: '',
-      description: 'Make sure you are logged into Claude.ai in your browser before using this node. Claude Code CLI will use your existing browser session.',
-      displayOptions: {
-        show: {
-          authMethod: ['browser'],
-        },
-      },
+      description: 'Claude Code CLI must be installed and authenticated on your n8n server. Run "claude auth status" to verify.',
     },
     {
       displayName: 'Project Path',
@@ -90,16 +39,12 @@ export class ClaudeCodeApi implements ICredentialType {
       type: 'options',
       options: [
         {
-          name: 'Claude 3 Sonnet',
+          name: 'Sonnet',
           value: 'sonnet',
         },
         {
-          name: 'Claude 3 Opus',
+          name: 'Opus',
           value: 'opus',
-        },
-        {
-          name: 'Claude 3 Haiku',
-          value: 'haiku',
         },
       ],
       default: 'sonnet',
@@ -113,8 +58,8 @@ export class ClaudeCodeApi implements ICredentialType {
         rows: 4,
       },
       default: '',
-      description: 'Environment variables to set for Claude Code CLI (KEY=value format, one per line)',
-      placeholder: 'ANTHROPIC_API_KEY=sk-ant-...\nCLAUDE_DEBUG=true',
+      description: 'Additional environment variables (KEY=value format, one per line)',
+      placeholder: 'CLAUDE_DEBUG=true\nCUSTOM_VAR=value',
     },
   ];
 }
