@@ -1,0 +1,133 @@
+{
+  "name": "Claude Code Example Workflow",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "1",
+      "name": "Start",
+      "type": "n8n-nodes-base.start",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "operation": "query",
+        "prompt": "Create a simple REST API with Express.js that has GET and POST endpoints for managing a todo list",
+        "projectPath": "/tmp/test-project",
+        "outputFormat": "structured",
+        "additionalOptions": {
+          "model": "sonnet",
+          "allowedTools": ["Read", "Write", "Bash"],
+          "maxTurns": 10,
+          "systemPrompt": "You are a helpful coding assistant. Create clean, well-documented code."
+        }
+      },
+      "id": "2",
+      "name": "Claude Code",
+      "type": "n8n-nodes-claudecode.claudeCode",
+      "typeVersion": 1,
+      "position": [450, 300],
+      "credentials": {
+        "claudeCodeApi": {
+          "id": "1",
+          "name": "Claude Code Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.summary.hasResult}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "3",
+      "name": "IF",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "operation": "continue",
+        "prompt": "Now add input validation and error handling to the API",
+        "outputFormat": "structured"
+      },
+      "id": "4",
+      "name": "Claude Code Continue",
+      "type": "n8n-nodes-claudecode.claudeCode",
+      "typeVersion": 1,
+      "position": [850, 200],
+      "credentials": {
+        "claudeCodeApi": {
+          "id": "1",
+          "name": "Claude Code Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "// Extract tool uses from Claude's response\nconst messages = items[0].json.messages || [];\nconst toolUses = messages.filter(m => m.type === 'tool_use');\n\nreturn toolUses.map(tool => ({\n  json: {\n    toolName: tool.content?.tool_name,\n    toolInput: tool.content?.tool_input,\n    timestamp: tool.timestamp\n  }\n}));"
+      },
+      "id": "5",
+      "name": "Extract Tool Uses",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [850, 400]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Claude Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude Code": {
+      "main": [
+        [
+          {
+            "node": "IF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF": {
+      "main": [
+        [
+          {
+            "node": "Claude Code Continue",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Extract Tool Uses",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "versionId": "1",
+  "id": "1",
+  "meta": {
+    "instanceId": "example"
+  },
+  "tags": []
+}

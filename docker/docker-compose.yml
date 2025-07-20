@@ -1,0 +1,74 @@
+version: '3.8'
+
+services:
+  n8n:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: n8n-claudecode
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=admin
+      - N8N_BASIC_AUTH_PASSWORD=claudecode
+      - N8N_HOST=localhost
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - NODE_ENV=production
+      - N8N_ENCRYPTION_KEY=n8n-encryption-key-change-me
+      - N8N_USER_FOLDER=/home/node/.n8n
+      - N8N_CUSTOM_EXTENSIONS=/home/node/.n8n/custom
+      # Claude authentication method (browser or apikey)
+      - CLAUDE_AUTH_METHOD=${CLAUDE_AUTH_METHOD:-browser}
+      # API key if using apikey method
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      # Browser profile for Claude Pro
+      - CLAUDE_BROWSER_PROFILE=${CLAUDE_BROWSER_PROFILE:-default}
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./custom:/home/node/.n8n/custom
+      # Mount browser profile for Claude Pro authentication
+      - chrome_data:/home/node/.config/google-chrome
+      # Mount X11 socket for GUI (optional, for initial auth)
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+    environment:
+      # For X11 forwarding (optional)
+      - DISPLAY=${DISPLAY:-:0}
+    networks:
+      - n8n-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5678/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Optional: Chrome browser for authentication
+  chrome:
+    image: selenium/standalone-chrome:latest
+    container_name: n8n-chrome
+    ports:
+      - "4444:4444"
+      - "7900:7900"  # noVNC for browser access
+    shm_size: 2g
+    environment:
+      - SE_VNC_NO_PASSWORD=1
+      - SE_NODE_MAX_SESSIONS=1
+    volumes:
+      - chrome_data:/home/seluser/.config/google-chrome
+    networks:
+      - n8n-network
+    profiles:
+      - auth
+
+volumes:
+  n8n_data:
+    name: n8n_claudecode_data
+  chrome_data:
+    name: n8n_chrome_data
+
+networks:
+  n8n-network:
+    driver: bridge
