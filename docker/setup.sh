@@ -37,16 +37,16 @@ read -p "Select (1 or 2): " auth_choice
 
 case $auth_choice in
     1)
-        sed -i 's/CLAUDE_AUTH_METHOD=.*/CLAUDE_AUTH_METHOD=browser/' .env
+        sed -i '' 's/CLAUDE_AUTH_METHOD=.*/CLAUDE_AUTH_METHOD=browser/' .env
         echo ""
         echo "Browser authentication selected."
         echo "You'll need to login to Claude.ai after the containers start."
         ;;
     2)
-        sed -i 's/CLAUDE_AUTH_METHOD=.*/CLAUDE_AUTH_METHOD=apikey/' .env
+        sed -i '' 's/CLAUDE_AUTH_METHOD=.*/CLAUDE_AUTH_METHOD=apikey/' .env
         echo ""
         read -p "Enter your Anthropic API key: " api_key
-        sed -i "s/# ANTHROPIC_API_KEY=.*/ANTHROPIC_API_KEY=$api_key/" .env
+        sed -i '' "s/# ANTHROPIC_API_KEY=.*/ANTHROPIC_API_KEY=$api_key/" .env
         echo "API key configured."
         ;;
 esac

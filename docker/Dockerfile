@@ -33,7 +33,10 @@ COPY --chown=node:node . /tmp/n8n-nodes-claudecode/
 
 # Install the module
 WORKDIR /home/node/.n8n/custom
-RUN npm install /tmp/n8n-nodes-claudecode && \
+RUN npm init -y && \
+    npm install /tmp/n8n-nodes-claudecode && \
+    ls -la && \
+    ls -la node_modules/ && \
     rm -rf /tmp/n8n-nodes-claudecode
 
 # Create authentication script
