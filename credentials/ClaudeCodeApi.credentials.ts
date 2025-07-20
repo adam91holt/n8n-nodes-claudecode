@@ -16,14 +16,6 @@ export class ClaudeCodeApi implements ICredentialType {
       description: 'Claude Code CLI must be installed and authenticated on your n8n server. Run "claude auth status" to verify.',
     },
     {
-      displayName: 'Project Path',
-      name: 'projectPath',
-      type: 'string',
-      default: '',
-      description: 'Default project path for Claude Code CLI (optional). Can be overridden in node.',
-      placeholder: '/path/to/project',
-    },
-    {
       displayName: 'System Prompt',
       name: 'systemPrompt',
       type: 'string',
@@ -32,23 +24,6 @@ export class ClaudeCodeApi implements ICredentialType {
       },
       default: '',
       description: 'Default system prompt for Claude Code (optional)',
-    },
-    {
-      displayName: 'Model',
-      name: 'model',
-      type: 'options',
-      options: [
-        {
-          name: 'Sonnet',
-          value: 'sonnet',
-        },
-        {
-          name: 'Opus',
-          value: 'opus',
-        },
-      ],
-      default: 'sonnet',
-      description: 'Default Claude model to use',
     },
     {
       displayName: 'Environment Variables',
