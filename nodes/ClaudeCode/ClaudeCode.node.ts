@@ -167,8 +167,8 @@ export class ClaudeCode implements INodeType {
                 name: 'args',
                 type: 'string',
                 default: '',
-                description: 'Arguments for the command (comma-separated)',
-                placeholder: '-y,@modelcontextprotocol/server-filesystem,/path',
+                description: 'Arguments for the command (space or comma separated)',
+                placeholder: '-y @modelcontextprotocol/server-slack or -y,@modelcontextprotocol/server-filesystem,/path',
               },
               {
                 displayName: 'Environment Variables',
@@ -294,10 +294,50 @@ export class ClaudeCode implements INodeType {
             // Build server configuration
             const server: any = {
               command: serverConfig.command,
-              args: serverConfig.args 
-                ? serverConfig.args.split(',').map((arg: string) => arg.trim()).filter((arg: string) => arg.length > 0) 
-                : [],
+              args: [],
             };
+            
+            // Parse arguments - handle both space and comma separation
+            if (serverConfig.args) {
+              const argString = serverConfig.args.trim();
+              
+              // If contains comma, split by comma
+              if (argString.includes(',')) {
+                server.args = argString.split(',').map((arg: string) => arg.trim()).filter((arg: string) => arg.length > 0);
+              } else {
+                // Otherwise split by spaces, but respect quoted strings
+                const args: string[] = [];
+                let current = '';
+                let inQuotes = false;
+                let quoteChar = '';
+                
+                for (let i = 0; i < argString.length; i++) {
+                  const char = argString[i];
+                  
+                  if ((char === '"' || char === "'") && !inQuotes) {
+                    inQuotes = true;
+                    quoteChar = char;
+                  } else if (char === quoteChar && inQuotes) {
+                    inQuotes = false;
+                    quoteChar = '';
+                  } else if (char === ' ' && !inQuotes) {
+                    if (current.trim()) {
+                      args.push(current.trim());
+                      current = '';
+                    }
+                  } else {
+                    current += char;
+                  }
+                }
+                
+                // Add last argument
+                if (current.trim()) {
+                  args.push(current.trim());
+                }
+                
+                server.args = args;
+              }
+            }
             
             if (additionalOptions.debug) {
               console.log(`[ClaudeCode] Configuring MCP server "${serverConfig.name}":`, {
